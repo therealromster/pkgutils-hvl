@@ -438,12 +438,12 @@ build_package() {
 	UPPER_NAME="$(printf "${name}" | tr '+' '_' | tr '-' '_' | \
 		tr '[:lower:]' '[:upper:]')"
 
-	export CFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_CFLAGS")"
-	export CXXFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_CXXFLAGS")"
-	export FFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_FFLAGS")"
-	export LDFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_LDFLAGS")"
-	#export CC="$(eval "echo \$PKGMK_${UPPER_NAME}_CC")"
-	#export CXX="$(eval "echo \$PKGMK_${UPPER_NAME}_CXX")"
+	[ -n "$(eval "echo \$PKGMK_${UPPER_NAME}_CFLAGS")" ] && export CFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_CFLAGS")"
+	[ -n "$(eval "echo \$PKGMK_${UPPER_NAME}_CXXFLAGS")" ] && export CXXFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_CXXFLAGS")"
+	[ -n "$(eval "echo \$PKGMK_${UPPER_NAME}_FFLAGS")" ] && export FFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_FFLAGS")"
+	[ -n "$(eval "echo \$PKGMK_${UPPER_NAME}_LDFLAGS")" ] && export LDFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_LDFLAGS")"
+	[ -n "$(eval "echo \$PKGMK_${UPPER_NAME}_CC")" ] && export CC="$(eval "echo \$PKGMK_${UPPER_NAME}_CC")"
+	[ -n "$(eval "echo \$PKGMK_${UPPER_NAME}_CXX")" ] && export CXX="$(eval "echo \$PKGMK_${UPPER_NAME}_CXX")"
 	
 	export PKG="${PKGMK_WORK_DIR}/pkg"
 	export SRC="${PKGMK_WORK_DIR}/src"
