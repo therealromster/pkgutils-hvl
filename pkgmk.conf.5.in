@@ -1,0 +1,63 @@
+.TH pkgmk.conf 5 "" "pkgutils #VERSION#" ""
+.SH NAME
+\fBpkgmk.conf\fR \- Configuration file for pkgmk.
+.SH DESCRIPTION
+\fBpkgmk.conf\fP configures pkgutils package make, pkgmk(8).
+.TP
+.SH FILE FORMAT
+The file consists of comments and options with arguments. Each line which starts with a hash (#) symbol is ignored by the parser. Options and arguments are case sensitive and of the form \fBOption=Argument\fR.
+.SH DIRECTIVES
+.LP
+When some option is not used (commented out or not included in the configuration file at all) pkgmk takes a default action.
+.TP
+\fBCFLAGS='STRING'\fR
+Set C compiler options.
+.br 
+Default: none
+.TP
+\fBCXXFLAGS='STRING'\fR
+Set C++ compiler options.
+.br 
+Default: none
+.TP
+\fBPKGMK_SOURCE_MIRRORS=('STRING')\fR
+Set mirrors to check and download from.
+.br 
+Default: none
+.TP
+\fBPKGMK_SOURCE_DIR='STRING'\fR
+Set directory for downloaded files.
+.br 
+Default: current directory of Pkgfile.
+.TP
+\fBPKGMK_PACKAGE_DIR='STRING'\fR
+Set directory for built packages.
+.br 
+Default: current directory of Pkgfile.
+.TP
+\fBPKGMK_WORK_DIR='STRING'\fR
+Set directory for building packages.
+.br 
+Default: work directory of Pkgfile.
+.TP
+\fBPKGMK_DOWNLOAD='STRING'\fR
+Download if source is not found.
+.br 
+Default: no
+.TP
+\fBPKGMK_IGNORE_FOOTPRINT='STRING'\fR
+Ignore footprint verification.
+.br 
+Default: no
+.TP
+\fBPKGMK_NO_STRIP='STRING'\fR
+Don't strip binarys of symbols.
+.br 
+Default: no
+.TP
+.SH SEE ALSO
+pkgmk(8), prt-get(8), prt-get.conf(5), wget(1).
+.SH COPYRIGHT
+pkgmk (pkgutils) is Copyright (c) 2000-2005 Per Liden and Copyright (c) 2006-2007 CRUX team (http://crux.nu).
+pkgmk (pkgutils) is licensed through the GNU General Public License.
+Read the COPYING file for the complete license.

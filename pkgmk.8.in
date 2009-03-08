@@ -34,6 +34,9 @@ Download missing source file(s).
 .B "\-do, \-\-download\-only"
 Do not build, only download missing source file(s).
 .TP
+.B "\-eo, \-\-extract\-only"
+Do not build, only extract source file(s).
+.TP
 .B "\-utd, \-\-up\-to\-date"
 Do not build, only check if the package is up to date.
 .TP
@@ -86,7 +89,7 @@ Global package make configuration.
 .B "wget"
 Used by pkgmk to download source code.
 .SH SEE ALSO
-pkgadd(8), pkgrm(8), pkginfo(8), rejmerge(8), wget(1)
+pkgadd(8), pkgrm(8), pkginfo(8), rejmerge(8), wget(1), pkgmk.conf(5)
 .SH COPYRIGHT
 pkgmk (pkgutils) is Copyright (c) 2000-2005 Per Liden and Copyright (c) 2006-2007 CRUX team (http://crux.nu).
 pkgmk (pkgutils) is licensed through the GNU General Public License.

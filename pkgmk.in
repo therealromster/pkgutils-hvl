@@ -65,85 +65,116 @@ check_pkgfile() {
 }
 
 check_directory() {
-	if [ ! -d $1 ]; then
-		error "Directory '$1' does not exist."
+	local DIRECTORY="`echo $1 | sed -e "s|/$name$||"`"
+	if [ ! -d "$DIRECTORY" ]; then
+		error "Directory '$DIRECTORY' does not exist."
 		exit 1
-	elif [ ! -w $1 ]; then
-		error "Directory '$1' not writable."
+	elif [ ! -w "$DIRECTORY" ]; then
+		error "Directory '$DIRECTORY' not writable."
 		exit 1
-	elif [ ! -x $1 ] || [ ! -r $1 ]; then
-		error "Directory '$1' not readable."
+	elif [ ! -x "$DIRECTORY" ] || [ ! -r "$DIRECTORY" ]; then
+		error "Directory '$DIRECTORY' not readable."
 		exit 1
+	fi
+	if [ ! -d "$1" ]; then
+		mkdir "$1"
 	fi
 }
 
 download_file() {
-	info "Downloading '$1'."
+	local FILE CURL_RETRY CURL_RETRY_DELAY IS_FTP FILE_SIZE
+	IS_FTP='0'
+	FILE="${1}"
+	info "Downloading '${FILE}'."
 
-	if [ ! "`type -p wget`" ]; then
-		error "Command 'wget' not found."
+	if [ ! -e "$(which curl)" ]; then
+		error "Command 'curl' not found."
 		exit 1
 	fi
 
-	LOCAL_FILENAME=`get_filename $1`
-	LOCAL_FILENAME_PARTIAL="$LOCAL_FILENAME.partial"
-	DOWNLOAD_OPTS="--passive-ftp --no-directories --tries=3 --waitretry=3 \
-		--directory-prefix=$PKGMK_SOURCE_DIR \
-		--output-document=$LOCAL_FILENAME_PARTIAL"
-
-	if [ -f "$LOCAL_FILENAME_PARTIAL" ]; then
-		info "Partial download found, trying to resume"
-		RESUME_CMD="-c"
+	# curl times out on ftp with error 28 and then tosses the data away
+	# this is a work around
+	[ -e "$(printf "${FILE}" | egrep '^ftp://')" ] && IS_FTP='1'
+	
+	# if curl has more than 1 retrys it will toss out file on ftp 
+	# protocol when ftp server does not close the connection
+	if [ "${IS_FTP}" = '1' ]; then
+		CURL_RETRY_DELAY=''
+		CURL_RETRY='--retry 0'
+	else
+		CURL_RETRY_DELAY='--retry-delay 10'
+		CURL_RETRY='--retry 3'
 	fi
 
-	error=1
+	LOCAL_FILENAME="$(get_filename "${FILE}")"
+	LOCAL_FILENAME_PARTIAL="${LOCAL_FILENAME}.partial"
+	DOWNLOAD_OPTS="--fail --globoff --insecure --location ${CURL_RETRY} \
+		${CURL_RETRY_DELAY} --no-buffer --connect-timeout 15 --keepalive-time 5 \
+		--speed-limit 1k --max-redirs 10 --output ${LOCAL_FILENAME_PARTIAL}"
 
-	BASENAME=`get_basename $1`
+	if [ -f "${LOCAL_FILENAME_PARTIAL}" ]; then
+		info 'Partial download found, trying to resume'
+		RESUME_CMD='--continue-at -'
+	fi
+
+	FILE_SIZE="$(curl --silent --head --header 'Cache-Control: no-cache, must-revalidate' --header 'Pragma: no-cache' ${FILE} | grep '^Content-Length: ' | cut --delimiter=' ' --fields=2)"
+
+	error='1'
+
+	BASENAME="$(get_basename "${FILE}")"
 	for REPO in ${PKGMK_SOURCE_MIRRORS[@]}; do
-		REPO="`echo $REPO | sed 's|/$||'`"
-		wget $RESUME_CMD $DOWNLOAD_OPTS $REPO/$BASENAME
-		error=$?
-		if [ $error == 0 ]; then
+		REPO="$(echo $REPO | sed 's|/$||')"
+		curl ${RESUME_CMD} ${DOWNLOAD_OPTS} ${REPO}/${BASENAME}
+		error="$?"
+		if [ "${IS_FTP}" = '1' ] && [ "${error}" = '28' ]; then
+			break
+		fi
+		if [ "${error}" = '0' ]; then
 			break
 		fi
 	done
 
-	if [ $error != 0 ]; then
+	if [ "${error}" != '0' ]; then
 		while true; do
-			wget $RESUME_CMD $DOWNLOAD_OPTS $1
-			error=$?
-			if [ $error != 0 ] && [ "$RESUME_CMD" ]; then
-				info "Partial download failed, restarting"
-				rm -f "$LOCAL_FILENAME_PARTIAL"
-				RESUME_CMD=""
+			curl ${RESUME_CMD} ${DOWNLOAD_OPTS} ${FILE}
+			error="$?"
+			if [ "${IS_FTP}" = '1' ] && [ "${error}" != '28' ] && \
+				[ "${error}" != '0' ] && [ "${RESUME_CMD}" ]; then
+				info 'Partial download failed, restarting'
+				rm -f "${LOCAL_FILENAME_PARTIAL}"
+				RESUME_CMD=''
 			else
 				break
 			fi
 		done
 	fi
-	
-	if [ $error != 0 ]; then
-		error "Downloading '$1' failed."
-		exit 1
+
+	if [ "${IS_FTP}" = '1' ] && [ "${error}" = '28' ]; then
+		error='0'
 	fi
 	
-	mv -f "$LOCAL_FILENAME_PARTIAL" "$LOCAL_FILENAME"
+	if [ "${error}" != '0' ]; then
+		error "Downloading '${FILE}' failed."
+		exit 1
+	fi
+
+	mv -f "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
 }
 
 download_source() {
 	local FILE LOCAL_FILENAME
 
 	for FILE in ${source[@]}; do
-		LOCAL_FILENAME=`get_filename $FILE`
-		if [ ! -e $LOCAL_FILENAME ]; then
-			if [ "$LOCAL_FILENAME" = "$FILE" ]; then
-				error "Source file '$LOCAL_FILENAME' not found (can not be downloaded, URL not specified)."
+		LOCAL_FILENAME="$(get_filename "${FILE}")"
+		if [ ! -e "${LOCAL_FILENAME}" ]; then
+			if [ "${LOCAL_FILENAME}" = "${FILE}" ]; then
+				error "Source file '${LOCAL_FILENAME}' not found (can not be downloaded, URL not specified)."
 				exit 1
 			else
-				if [ "$PKGMK_DOWNLOAD" = "yes" ]; then
-					download_file $FILE
+				if [ "${PKGMK_DOWNLOAD}" = 'yes' ]; then
+					download_file "${FILE}"
 				else
-					error "Source file '$LOCAL_FILENAME' not found (use option -d to download)."
+					error "Source file '${LOCAL_FILENAME}' not found (use option -d to download)."
 					exit 1
 				fi
 			fi
@@ -155,12 +186,16 @@ unpack_source() {
 	local FILE LOCAL_FILENAME COMMAND
 	
 	for FILE in ${source[@]}; do
-		LOCAL_FILENAME=`get_filename $FILE`
+		LOCAL_FILENAME=$(get_filename "${FILE}")
 		case $LOCAL_FILENAME in
 			*.tar.gz|*.tar.Z|*.tgz)
 				COMMAND="tar -C $SRC --use-compress-program=gzip -xf $LOCAL_FILENAME" ;;
 			*.tar.bz2)
 				COMMAND="tar -C $SRC --use-compress-program=bzip2 -xf $LOCAL_FILENAME" ;;
+			*.tar.lzma)
+				COMMAND="tar -C $SRC --use-compress-program=lzma -xf $LOCAL_FILENAME" ;;
+			*.tar.lrzip)
+				COMMAND="tar -C $SRC --use-compress-program=lrzip -xf $LOCAL_FILENAME" ;;
 			*.zip)
 				COMMAND="unzip -qq -o -d $SRC $LOCAL_FILENAME" ;;
 			*)
@@ -183,13 +218,25 @@ unpack_source() {
 
 make_md5sum() {
 	local FILE LOCAL_FILENAMES
-	
-	if [ "$source" ]; then
+
+	if [ "${source}" ]; then
 		for FILE in ${source[@]}; do
-			LOCAL_FILENAMES="$LOCAL_FILENAMES `get_filename $FILE`"
+			LOCAL_FILENAMES="${LOCAL_FILENAMES} $(get_filename "${FILE}")"
 		done
 		
-		md5sum $LOCAL_FILENAMES | sed -e 's|  .*/|  |' | sort -k 2
+		md5sum ${LOCAL_FILENAMES} | sed -e 's|  .*/|  |' | sort -k 2
+	fi
+}
+
+make_sha256sum() {
+	local FILE LOCAL_FILENAMES
+
+	if [ "${source}" ]; then
+		for FILE in ${source[@]}; do
+			LOCAL_FILENAMES="${LOCAL_FILENAMES} $(get_filename "${FILE}")"
+		done
+
+		sha256sum ${LOCAL_FILENAMES} | sed -e 's|  .*/|  |' | sort -k 2
 	fi
 }
 
@@ -199,54 +246,91 @@ make_footprint() {
 		sort -k 3
 }
 
-check_md5sum() {
-	local FILE="$PKGMK_WORK_DIR/.tmp"
+check_sum() {
+	local FILE="${PKGMK_WORK_DIR}/.tmp"
 
-	cd $PKGMK_ROOT
+	cd "${PKGMK_ROOT}"
 	
-	if [ -f $PKGMK_MD5SUM ]; then
-		make_md5sum > $FILE.md5sum
-		sort -k 2 $PKGMK_MD5SUM > $FILE.md5sum.orig
-		diff -w -t -U 0 $FILE.md5sum.orig $FILE.md5sum | \
+	if [ -f "${PKGMK_SHA256SUM}" ]; then
+		make_sha256sum > "${FILE}.sha256sum"
+		sort -k 2 "${PKGMK_SHA256SUM}" > "${FILE}.sha256sum.orig"
+		diff -w -t -U 0 "${FILE}.sha256sum.orig" "${FILE}.sha256sum" | \
 			sed '/^@@/d' | \
 			sed '/^+++/d' | \
 			sed '/^---/d' | \
 			sed 's/^+/NEW       /g' | \
-			sed 's/^-/MISSING   /g' > $FILE.md5sum.diff
-		if [ -s $FILE.md5sum.diff ]; then
-			error "Md5sum mismatch found:"
-			cat $FILE.md5sum.diff >&2
+			sed 's/^-/MISSING   /g' > $FILE.sha256sum.diff
+		if [ -s "${FILE}.sha256sum.diff" ]; then
+			error 'Sha256sum mismatch found:'
+			cat "${FILE}.sha256sum.diff" >&2
 
-			if [ "$PKGMK_KEEP_WORK" = "no" ]; then
-				rm -rf $PKGMK_WORK_DIR
+			if [ "${PKGMK_CHECK_SUM}" = 'yes' ]; then
+				error 'Sha256sum not ok.'
+				exit 1
 			fi
 
-			if [ "$PKGMK_CHECK_MD5SUM" = "yes" ]; then
+			error "Building '${TARGET}' failed."
+			exit 1
+		fi
+	else
+		if [ "${PKGMK_CHECK_SUM}" = 'yes' ]; then
+			if [ "${PKGMK_KEEP_WORK}" = 'no' ]; then
+				rm -rf "${PKGMK_WORK_DIR}"
+			fi
+			warning 'Sha256sum not found.'
+			exit 1
+		fi
+
+		warning 'Sha256sum not found.'
+		#warning 'Sha256sum not found, creating new.'
+		#make_sha256sum > "${PKGMK_SHA256SUM}"
+	fi
+			
+	if [ -f "${PKGMK_MD5SUM}" ]; then
+		make_md5sum > "${FILE}.md5sum"
+		sort -k 2 "${PKGMK_MD5SUM}" > "${FILE}.md5sum.orig"
+		diff -w -t -U 0 "${FILE}.md5sum.orig" "${FILE}.md5sum" | \
+			sed '/^@@/d' | \
+			sed '/^+++/d' | \
+			sed '/^---/d' | \
+			sed 's/^+/NEW       /g' | \
+			sed 's/^-/MISSING   /g' > "${FILE}.md5sum.diff"
+		if [ -s "${FILE}.md5sum.diff" ]; then
+			error 'Md5sum mismatch found:'
+			cat "${FILE}.md5sum.diff" >&2
+
+			if [ "${PKGMK_KEEP_WORK}" = 'no' ]; then
+				rm -rf "${PKGMK_WORK_DIR}"
+			fi
+
+			if [ "${PKGMK_CHECK_SUM}" = "yes" ]; then
 				error "Md5sum not ok."
 				exit 1
 			fi
 
-			error "Building '$TARGET' failed."
+			error "Building '${TARGET}' failed."
 			exit 1
 		fi
 	else
-		if [ "$PKGMK_CHECK_MD5SUM" = "yes" ]; then
-			if [ "$PKGMK_KEEP_WORK" = "no" ]; then
-				rm -rf $PKGMK_WORK_DIR
+		if [ "${PKGMK_CHECK_SUM}" = 'yes' ]; then
+			if [ "${PKGMK_KEEP_WORK}" = 'no' ]; then
+				rm -rf "${PKGMK_WORK_DIR}"
 			fi
-			info "Md5sum not found."
+			warning 'Md5sum not found.'
 			exit 1
 		fi
 		
-		warning "Md5sum not found, creating new."
-		make_md5sum > $PKGMK_MD5SUM
+		error "Md5sum not found, proceed with caution. Use \"pkgmk -um\" to generate new md5sum."
+		exit 1
+		#warning 'Md5sum not found, creating new.'
+		#make_md5sum > "${PKGMK_MD5SUM}"
 	fi
 
-	if [ "$PKGMK_CHECK_MD5SUM" = "yes" ]; then
-		if [ "$PKGMK_KEEP_WORK" = "no" ]; then
-			rm -rf $PKGMK_WORK_DIR
+	if [ "${PKGMK_CHECK_SUM}" = 'yes' ]; then
+		if [ "${PKGMK_KEEP_WORK}" = 'no' ]; then
+			rm -rf "${PKGMK_WORK_DIR}"
 		fi
-		info "Md5sum ok."
+		info 'Checksums ok.'
 		exit 0
 	fi
 }
@@ -301,6 +385,12 @@ compress_manpages() {
 	done
 }
 
+remove_junkfiles() {
+	if [ -e $PKG/usr/share/info/dir ]; then
+		rm -rf $PKG/usr/share/info/dir
+	fi
+}
+
 check_footprint() {
 	local FILE="$PKGMK_WORK_DIR/.tmp"
 	
@@ -317,9 +407,14 @@ check_footprint() {
 				sed 's/^+/NEW       /g' | \
 				sed 's/^-/MISSING   /g' > $FILE.footprint.diff
 			if [ -s $FILE.footprint.diff ]; then
-				error "Footprint mismatch found:"
-				cat $FILE.footprint.diff >&2
-				BUILD_SUCCESSFUL="no"
+				if [ -n "$(egrep '^MISSING   ' $FILE.footprint.diff)" ]; then
+					error "Footprint mismatch found:"
+					cat $FILE.footprint.diff >&2
+					BUILD_SUCCESSFUL="no"
+				else
+					warning "Footprint mismatch found:"
+					cat $FILE.footprint.diff >&2
+				fi
 			fi
 		else
 			warning "Footprint not found, creating new."
@@ -332,18 +427,30 @@ check_footprint() {
 }
 
 build_package() {
-	local BUILD_SUCCESSFUL="no"
+	local BUILD_SUCCESSFUL UPPER_NAME
 	
-	export PKG="$PKGMK_WORK_DIR/pkg"
-	export SRC="$PKGMK_WORK_DIR/src"
+	BUILD_SUCCESSFUL='no'
+
+	UPPER_NAME="$(printf "${name}" | tr '+' '_' | tr '-' '_' | \
+		tr '[:lower:]' '[:upper:]')"
+
+	export CFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_CFLAGS")"
+	export CXXFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_CXXFLAGS")"
+	export FFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_FFLAGS")"
+	export LDFLAGS+=" $(eval "echo \$PKGMK_${UPPER_NAME}_LDFLAGS")"
+	#export CC="$(eval "echo \$PKGMK_${UPPER_NAME}_CC")"
+	#export CXX="$(eval "echo \$PKGMK_${UPPER_NAME}_CXX")"
+	
+	export PKG="${PKGMK_WORK_DIR}/pkg"
+	export SRC="${PKGMK_WORK_DIR}/src"
 	umask 022
 	
 	cd $PKGMK_ROOT
 	rm -rf $PKGMK_WORK_DIR
 	mkdir -p $SRC $PKG
 	
-	if [ "$PKGMK_IGNORE_MD5SUM" = "no" ]; then
-		check_md5sum
+	if [ "$PKGMK_IGNORE_SUM" = "no" ]; then
+		check_sum
 	fi
 
 	if [ "$UID" != "0" ]; then
@@ -355,6 +462,11 @@ build_package() {
 	unpack_source
 	
 	cd $SRC
+
+	if [ "$PKGMK_EXTRACT_ONLY" = "yes" ]; then
+		exit 0
+	fi
+
 	(set -e -x ; build)
 	
 	if [ $? = 0 ]; then
@@ -364,6 +476,8 @@ build_package() {
 		
 		compress_manpages
 		
+		remove_junkfiles
+
 		cd $PKG
 		info "Build result:"
 		tar czvvf $TARGET *
@@ -483,8 +597,8 @@ interrupted() {
 	echo ""
 	error "Interrupted."
 	
-	if [ "$PKGMK_KEEP_WORK" = "no" ]; then
-		rm -rf $PKGMK_WORK_DIR
+	if [ "${PKGMK_KEEP_WORK}" = 'no' ]; then
+		rm -rf "${PKGMK_WORK_DIR}"
 	fi
 	
 	exit 1
@@ -498,12 +612,13 @@ print_help() {
 	echo "  -r,   --recursive           search for and build packages recursively"
 	echo "  -d,   --download            download missing source file(s)"
 	echo "  -do,  --download-only       do not build, only download missing source file(s)"
+	echo "  -eo,  --extract-only        do not build, only extract source file(s)"
 	echo "  -utd, --up-to-date          do not build, only check if package is up to date"
 	echo "  -uf,  --update-footprint    update footprint using result from last build"
 	echo "  -if,  --ignore-footprint    build package without checking footprint"
-	echo "  -um,  --update-md5sum       update md5sum"
-	echo "  -im,  --ignore-md5sum       build package without checking md5sum"
-	echo "  -cm,  --check-md5sum        do not build, only check md5sum"
+	echo "  -um,  --update-md5sum       update checksums"
+	echo "  -im,  --ignore-md5sum       build package without checking checksums"
+	echo "  -cm,  --check-md5sum        do not build, only check checksums"
 	echo "  -ns,  --no-strip            do not strip executable binaries or libraries"
 	echo "  -f,   --force               build package even if it appears to be up to date"
 	echo "  -c,   --clean               remove package and downloaded files"
@@ -527,6 +642,8 @@ parse_options() {
 			-do|--download-only)
 				PKGMK_DOWNLOAD="yes"
 				PKGMK_DOWNLOAD_ONLY="yes" ;;
+			-eo|--extract-only)
+				PKGMK_EXTRACT_ONLY="yes" ;;
 			-utd|--up-to-date)
 				PKGMK_UP_TO_DATE="yes" ;;
 			-uf|--update-footprint)
@@ -534,11 +651,11 @@ parse_options() {
 			-if|--ignore-footprint)
 				PKGMK_IGNORE_FOOTPRINT="yes" ;;
 			-um|--update-md5sum)
-				PKGMK_UPDATE_MD5SUM="yes" ;;
+				PKGMK_UPDATE_SUM="yes" ;;
 			-im|--ignore-md5sum)
-				PKGMK_IGNORE_MD5SUM="yes" ;;
+				PKGMK_IGNORE_SUM="yes" ;;
 			-cm|--check-md5sum)
-				PKGMK_CHECK_MD5SUM="yes" ;;
+				PKGMK_CHECK_SUM="yes" ;;
 			-ns|--no-strip)
 				PKGMK_NO_STRIP="yes" ;;
 			-f|--force)
@@ -588,7 +705,7 @@ main() {
 	
 	check_directory "$PKGMK_SOURCE_DIR"
 	check_directory "$PKGMK_PACKAGE_DIR"
-	check_directory "`dirname $PKGMK_WORK_DIR`"
+	check_directory "$(dirname "${PKGMK_WORK_DIR}")"
 	
 	check_pkgfile
 	
@@ -604,16 +721,23 @@ main() {
 		exit 0
 	fi
 	
-	if [ "$PKGMK_UPDATE_MD5SUM" = "yes" ]; then
+	if [ "${PKGMK_UPDATE_SUM}" = 'yes' ]; then
 		download_source
-		make_md5sum > $PKGMK_MD5SUM
-		info "Md5sum updated."
+		make_md5sum > "${PKGMK_MD5SUM}"
+		info 'Md5sum updated.'
+		make_sha256sum > "${PKGMK_SHA256SUM}"
+		info 'Sha256sum updated.'
 		exit 0
 	fi
 	
 	if [ "$PKGMK_DOWNLOAD_ONLY" = "yes" ]; then
 		download_source
 		exit 0
+	fi
+	
+	if [ "$PKGMK_EXTRACT_ONLY" = "yes" ]; then
+		download_source
+		build_package
 	fi
 	
 	if [ "$PKGMK_UP_TO_DATE" = "yes" ]; then
@@ -625,7 +749,7 @@ main() {
 		exit 0
 	fi
 	
-	if [ "`build_needed`" = "no" ] && [ "$PKGMK_FORCE" = "no" ] && [ "$PKGMK_CHECK_MD5SUM" = "no" ]; then
+	if [ "`build_needed`" = "no" ] && [ "$PKGMK_FORCE" = "no" ] && [ "$PKGMK_CHECK_SUM" = "no" ]; then
 		info "Package '$TARGET' is up to date."
 	else
 		download_source
@@ -651,6 +775,7 @@ PKGMK_CONFFILE="/etc/pkgmk.conf"
 PKGMK_PKGFILE="Pkgfile"
 PKGMK_FOOTPRINT=".footprint"
 PKGMK_MD5SUM=".md5sum"
+PKGMK_SHA256SUM=".sha256sum"
 PKGMK_NOSTRIP=".nostrip"
 
 PKGMK_SOURCE_MIRRORS=()
@@ -662,14 +787,15 @@ PKGMK_INSTALL="no"
 PKGMK_RECURSIVE="no"
 PKGMK_DOWNLOAD="no"
 PKGMK_DOWNLOAD_ONLY="no"
+PKGMK_EXTRACT_ONLY="no"
 PKGMK_UP_TO_DATE="no"
 PKGMK_UPDATE_FOOTPRINT="no"
 PKGMK_IGNORE_FOOTPRINT="no"
 PKGMK_FORCE="no"
 PKGMK_KEEP_WORK="no"
-PKGMK_UPDATE_MD5SUM="no"
-PKGMK_IGNORE_MD5SUM="no"
-PKGMK_CHECK_MD5SUM="no"
+PKGMK_UPDATE_SUM="no"
+PKGMK_IGNORE_SUM="no"
+PKGMK_CHECK_SUM="no"
 PKGMK_NO_STRIP="no"
 PKGMK_CLEAN="no"
 
