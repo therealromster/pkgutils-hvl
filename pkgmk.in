@@ -23,13 +23,13 @@
 #
 
 array() {
-	printf "${2}" | tr --delete '\n' | sed \
+	printf "%s" "${2}" | tr --delete '\n' | sed \
 		-e 's|[\t| ]\+| |g' | \
 		cut --delimiter=' ' --fields="${1}"
 }
 
 array_count() {
-	printf "${1}" | tr --delete '\n' | sed \
+	printf "%s" "${1}" | tr --delete '\n' | sed \
 		-e 's|[\t| ]\+| |g' \
 		-e 's|^ ||' \
 		-e 's| $||'	| wc --words
@@ -192,7 +192,7 @@ download_file() {
 }
 
 download_source() {
-	local FILE LOCAL_FILENAME SCHEME PKG_SOURCE_MIRRORS PKG_SOURCE_MIRROR MIRROR_NAME
+	local DOWNLOAD_FILE FILE LOCAL_FILENAME SCHEME PKG_SOURCE_MIRRORS PKG_SOURCE_MIRROR MIRROR_NAME
 
 	for FILE in ${source[@]}; do
 		LOCAL_FILENAME="$(get_filename "${FILE}")"
@@ -212,8 +212,9 @@ download_source() {
 						PKG_SOURCE_MIRRORS="$(cat "/etc/ports/mirrors/${MIRROR_NAME}" | xargs)" || error "Error in mirror list."
 						MIRROR_TOTAL="$(array_count "${PKG_SOURCE_MIRRORS}")"
 						PKG_SOURCE_MIRROR="$(( $(perl -e "print int( rand( ${MIRROR_TOTAL} ) );") + 1))"
-						download_file "$(array "${PKG_SOURCE_MIRROR}" "${PKG_SOURCE_MIRRORS}")$(get_mirror_path "${FILE}" "${MIRROR_NAME}")" || \
-							error "Error in mirror download."
+						DOWNLOAD_FILE="$(array "${PKG_SOURCE_MIRROR}" "${PKG_SOURCE_MIRRORS}")$(get_mirror_path "${FILE}" "${MIRROR_NAME}")"
+						DOWNLOAD_FILE="$(echo "${DOWNLOAD_FILE}" | sed -e "s|%n|$name|")"
+						download_file "${DOWNLOAD_FILE}"
 					else
 						download_file "${FILE}"
 					fi
@@ -270,7 +271,7 @@ make_md5sum() {
 			LOCAL_FILENAMES="${LOCAL_FILENAMES} $(get_filename "${FILE}")"
 		done
 		
-		md5sum ${LOCAL_FILENAMES} | sed -e 's|  .*/|  |' | sort -k 2
+		md5sum ${LOCAL_FILENAMES} | sed -e 's|  .*/|  |' | sort -k 2 | uniq
 	fi
 }
 
@@ -282,7 +283,7 @@ make_sha256sum() {
 			LOCAL_FILENAMES="${LOCAL_FILENAMES} $(get_filename "${FILE}")"
 		done
 
-		sha256sum ${LOCAL_FILENAMES} | sed -e 's|  .*/|  |' | sort -k 2
+		sha256sum ${LOCAL_FILENAMES} | sed -e 's|  .*/|  |' | sort -k 2 | uniq
 	fi
 }
 
