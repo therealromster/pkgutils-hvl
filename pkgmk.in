@@ -35,6 +35,24 @@ array_count() {
 		-e 's| $||'	| wc --words
 }
 
+array_remove() {
+	local ITEM ARRAY TOTAL ITEM_VALUE
+	ITEM="${1}"
+	ARRAY="${2}"
+	TOTAL="$(array_count "${ARRAY}")"
+	ITEM_VALUE="$(array "${ITEM}" "${ARRAY}")"
+	if [ "${TOTAL}" = '1' ]; then
+		# 1 item to remove with no spaces
+		printf "%s" "${ARRAY}" | sed -e "s|$ITEM_VALUE||"
+	elif [ "${ITEM}" = "${TOTAL}" ]; then
+		# last item in array to remove with leading space
+		printf "%s" "${ARRAY}" | sed -e "s| $ITEM_VALUE||"
+	else
+		# remove items with trailing space
+		printf "%s" "${ARRAY}" | sed -e "s|$ITEM_VALUE ||"
+	fi
+}
+
 info() {
 	echo "=======> $1"
 }
@@ -111,9 +129,10 @@ check_directory() {
 }
 
 download_file() {
-	local FILE CURL_RETRY CURL_RETRY_DELAY IS_FTP FILE_SIZE
+	local FILE CURL_RETRY CURL_RETRY_DELAY IS_FTP FILE_SIZE NO_MIRROR_ERROR
 	IS_FTP='0'
 	FILE="${1}"
+	NO_MIRROR_ERROR="${2}"
 	info "Downloading '${FILE}'."
 
 	if [ ! -e "$(which curl)" ]; then
@@ -183,16 +202,22 @@ download_file() {
 		error='0'
 	fi
 	
-	if [ "${error}" != '0' ]; then
+	if [ "${NO_MIRROR_ERROR}" = 'no_mirror_error' ]; then
+		if [ "${error}" != '0' ]; then
+			warning "Downloading '${FILE}' from mirror failed trying again."
+		fi
+	elif [ "${error}" != '0' ]; then
 		error "Downloading '${FILE}' failed."
 		exit 1
 	fi
 
-	mv -f "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
+	if [ -e "${LOCAL_FILENAME_PARTIAL}" ]; then
+		mv "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
+	fi
 }
 
 download_source() {
-	local DOWNLOAD_FILE FILE LOCAL_FILENAME SCHEME PKG_SOURCE_MIRRORS PKG_SOURCE_MIRROR MIRROR_NAME
+	local DOWNLOAD_FILE FILE LOCAL_FILENAME SCHEME PKG_SOURCE_MIRRORS PKG_SOURCE_MIRROR MIRROR_NAME LOCAL_FILENAME
 
 	for FILE in ${source[@]}; do
 		LOCAL_FILENAME="$(get_filename "${FILE}")"
@@ -209,12 +234,22 @@ download_source() {
 						if [ ! -e "/etc/ports/mirrors/${MIRROR_NAME}" ]; then
 							error "Error '/etc/ports/mirrors/${MIRROR_NAME}' does not exist."
 						fi
-						PKG_SOURCE_MIRRORS="$(cat "/etc/ports/mirrors/${MIRROR_NAME}" | xargs)" || error "Error in mirror list."
-						MIRROR_TOTAL="$(array_count "${PKG_SOURCE_MIRRORS}")"
-						PKG_SOURCE_MIRROR="$(( $(perl -e "print int( rand( ${MIRROR_TOTAL} ) );") + 1))"
-						DOWNLOAD_FILE="$(array "${PKG_SOURCE_MIRROR}" "${PKG_SOURCE_MIRRORS}")$(get_mirror_path "${FILE}" "${MIRROR_NAME}")"
-						DOWNLOAD_FILE="$(echo "${DOWNLOAD_FILE}" | sed -e "s|%n|$name|")"
-						download_file "${DOWNLOAD_FILE}"
+
+						# start looping though mirror file
+						MIRROR_TOTAL=2
+						PKG_SOURCE_MIRRORS="$(cat "/etc/ports/mirrors/${MIRROR_NAME}" | xargs)"
+						LOCAL_FILENAME="$(get_filename "${FILE}")"
+						while [ "${MIRROR_TOTAL}" -gt '1' ] && [ ! -e "${LOCAL_FILENAME}" ]; do
+							MIRROR_TOTAL="$(array_count "${PKG_SOURCE_MIRRORS}")"
+							PKG_SOURCE_MIRROR="$(( $(perl -e "print int( rand( ${MIRROR_TOTAL} ) );") + 1))"
+							DOWNLOAD_FILE="$(array "${PKG_SOURCE_MIRROR}" "${PKG_SOURCE_MIRRORS}")$(get_mirror_path "${FILE}" "${MIRROR_NAME}")"
+							DOWNLOAD_FILE="$(echo "${DOWNLOAD_FILE}" | sed -e "s|%n|$name|")"
+							download_file "${DOWNLOAD_FILE}" 'no_mirror_error'
+
+							# remove failed mirror but this wont get parsed if file has been downloaded already
+							PKG_SOURCE_MIRRORS="$(array_remove "${PKG_SOURCE_MIRROR}" "${PKG_SOURCE_MIRRORS}")"
+						done
+
 					else
 						download_file "${FILE}"
 					fi
