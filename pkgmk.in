@@ -204,7 +204,7 @@ download_file() {
 	
 	if [ "${NO_MIRROR_ERROR}" = 'no_mirror_error' ]; then
 		if [ "${error}" != '0' ]; then
-			warning "Downloading '${FILE}' from mirror failed trying again."
+			warning "Downloading '${FILE}' from mirror failed, trying again."
 		fi
 	elif [ "${error}" != '0' ]; then
 		error "Downloading '${FILE}' failed."
@@ -212,7 +212,14 @@ download_file() {
 	fi
 
 	if [ -e "${LOCAL_FILENAME_PARTIAL}" ]; then
-		mv "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
+
+		# some mirrors return text when file does not exist so remove text file.
+		if [ "$(/usr/bin/file --brief --mime "${LOCAL_FILENAME_PARTIAL}" | grep 'text/plain')" ]; then
+			warning "Downloading '${FILE}' from mirror returned text, trying again."
+			rm "${LOCAL_FILENAME_PARTIAL}"
+		else
+			mv "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
+		fi
 	fi
 }
 
@@ -270,7 +277,7 @@ unpack_source() {
 		case $LOCAL_FILENAME in
 			*.tar.gz|*.tar.Z|*.tgz)
 				COMMAND="tar -C $SRC --use-compress-program=gzip -xf $LOCAL_FILENAME" ;;
-			*.tar.bz2)
+			*.tar.bz2|*.tbz)
 				COMMAND="tar -C $SRC --use-compress-program=bzip2 -xf $LOCAL_FILENAME" ;;
 			*.tar.lzma)
 				COMMAND="tar -C $SRC --use-compress-program=lzma -xf $LOCAL_FILENAME" ;;
