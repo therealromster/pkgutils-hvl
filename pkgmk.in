@@ -215,8 +215,17 @@ download_file() {
 
 		# some mirrors return text when file does not exist so remove text file.
 		if [ "$(/usr/bin/file --brief --mime "${LOCAL_FILENAME_PARTIAL}" | grep 'text/plain')" ]; then
-			warning "Downloading '${FILE}' from mirror returned text, trying again."
-			rm "${LOCAL_FILENAME_PARTIAL}"
+			# if file is text and has archive extension it's wrong
+			case "${LOCAL_FILENAME_PARTIAL}" in
+				*.tar.gz|*.tar.Z|*.tgz|*.tar.bz2|*.tbz|*.tar.lzma|*.tar.xz|*.tar.lrzip|*.zip)
+					warning "Downloading '${FILE}' from mirror returned text, trying again."
+					rm "${LOCAL_FILENAME_PARTIAL}"
+				;;
+				*)
+					# allow other files to be text like patch files
+					mv "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
+				;;
+			esac
 		else
 			mv "${LOCAL_FILENAME_PARTIAL}" "${LOCAL_FILENAME}"
 		fi
