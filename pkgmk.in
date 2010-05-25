@@ -510,9 +510,9 @@ check_footprint() {
 						info "New files found:"
 				else
 					error "Footprint mismatch found:"
-					cat $FILE.footprint.diff >&2
 					BUILD_SUCCESSFUL="no"
 				fi
+				cat $FILE.footprint.diff >&2
 			fi
 		else
 			warning "Footprint not found, creating new."
