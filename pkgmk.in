@@ -4,7 +4,7 @@
 # 
 #  Copyright (c) 2000-2005 Per Liden
 #  Copyright (c) 2006-2007 by CRUX team (http://crux.nu)
-#  Copyright (c) 2008-2009 by HV Linux (http://romster.dyndns.org:8080/)
+#  Copyright (c) 2008-2010 by HV Linux (http://hvlinux.net)
 # 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -505,13 +505,13 @@ check_footprint() {
 				sed 's/^+/NEW       /g' | \
 				sed 's/^-/MISSING   /g' > $FILE.footprint.diff
 			if [ -s $FILE.footprint.diff ]; then
-				if [ -n "$(egrep '^MISSING   ' $FILE.footprint.diff)" ]; then
+				if [ "$PKGMK_IGNORE_FOOTPRINT_NEW" = "yes" ] && \
+					[ -n "$(egrep --files-with-matches ^MISSING $FILE.footprint.diff)" ]; then
+						info "New files found:"
+				else
 					error "Footprint mismatch found:"
 					cat $FILE.footprint.diff >&2
 					BUILD_SUCCESSFUL="no"
-				else
-					warning "Footprint mismatch found:"
-					cat $FILE.footprint.diff >&2
 				fi
 			fi
 		else
@@ -714,6 +714,8 @@ print_help() {
 	echo "  -utd, --up-to-date          do not build, only check if package is up to date"
 	echo "  -uf,  --update-footprint    update footprint using result from last build"
 	echo "  -if,  --ignore-footprint    build package without checking footprint"
+	echo "  -in,  --ignore-new          build package, ignore new files in a footprint mismatch"
+
 	echo "  -um,  --update-md5sum       update checksums"
 	echo "  -im,  --ignore-md5sum       build package without checking checksums"
 	echo "  -cm,  --check-md5sum        do not build, only check checksums"
@@ -746,6 +748,8 @@ parse_options() {
 				PKGMK_UP_TO_DATE="yes" ;;
 			-uf|--update-footprint)
 				PKGMK_UPDATE_FOOTPRINT="yes" ;;
+			-in|--ignore-new)
+				PKGMK_IGNORE_FOOTPRINT_NEW="yes" ;;
 			-if|--ignore-footprint)
 				PKGMK_IGNORE_FOOTPRINT="yes" ;;
 			-um|--update-md5sum)
@@ -889,6 +893,7 @@ PKGMK_EXTRACT_ONLY="no"
 PKGMK_UP_TO_DATE="no"
 PKGMK_UPDATE_FOOTPRINT="no"
 PKGMK_IGNORE_FOOTPRINT="no"
+PKGMK_IGNORE_FOOTPRINT_NEW="no"
 PKGMK_FORCE="no"
 PKGMK_KEEP_WORK="no"
 PKGMK_UPDATE_SUM="no"

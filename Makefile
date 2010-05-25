@@ -3,7 +3,7 @@
 #
 #  Copyright (c) 2000-2005 by Per Liden <per@fukt.bth.se>
 #  Copyright (c) 2006-2007 by CRUX team (http://crux.nu)
-#  Copyright (c) 2008-2009 by HV Linux (http://romster.dyndns.org:8080/)
+#  Copyright (c) 2008-2010 by HV Linux (http://hvlinux.net)
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ BINDIR = /usr/bin
 MANDIR ?= /usr/share/man
 ETCDIR = /etc
 
-VERSION = 5.32.0_5
+VERSION = 5.32.0_6
 NAME = pkgutils-$(VERSION)
 
 CXXFLAGS += -DNDEBUG
