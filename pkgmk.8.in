@@ -17,6 +17,8 @@ times of the source files to decide if the package needs to be updated.
 
 Global build configuration is stored in \fI/etc/pkgmk.conf\fP. This
 file is read by pkgmk at startup.
+
+If you have a SMP system installing pigz will speed up package and man page compression.
 .SH OPTIONS
 .TP
 .B "\-i, \-\-install"
@@ -94,6 +96,6 @@ Used by pkgmk to download source code.
 .SH SEE ALSO
 pkgadd(8), pkgrm(8), pkginfo(8), rejmerge(8), wget(1), pkgmk.conf(5)
 .SH COPYRIGHT
-pkgmk (pkgutils) is Copyright (c) 2000-2005 Per Liden and Copyright (c) 2006-2007 CRUX team (http://crux.nu).
+pkgmk (pkgutils) is Copyright (c) 2000-2005 Per Liden, Copyright (c) 2006-2007 CRUX team (http://crux.nu) and Copyright (c) 2008-2010 by HV Linux (http://hvlinux.net).
 pkgmk (pkgutils) is licensed through the GNU General Public License.
 Read the COPYING file for the complete license.

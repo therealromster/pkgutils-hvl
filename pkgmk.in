@@ -465,7 +465,11 @@ compress_manpages() {
 	
 	find . -type f -path "*/man/man*/*" | while read FILE; do
 		if [ "$FILE" = "${FILE%%.gz}" ]; then
-			gzip -9 "$FILE"
+			if [ -f /usr/bin/pigz ]; then
+				pigz -9 "$FILE"
+			else
+				gzip -9 "$FILE"
+			fi
 		fi
 	done
 	
@@ -578,7 +582,11 @@ build_package() {
 
 		cd $PKG
 		info "Build result:"
-		tar czvvf $TARGET *
+		if [ -f /usr/bin/pigz ]; then
+			tar -cvv --use-compress-program=pigz -f $TARGET *
+		else
+			tar czvvf $TARGET *
+		fi
 		
 		if [ $? = 0 ]; then
 			BUILD_SUCCESSFUL="yes"
