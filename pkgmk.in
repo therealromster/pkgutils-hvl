@@ -112,7 +112,7 @@ check_pkgfile() {
 }
 
 check_directory() {
-	local DIRECTORY="`echo $1 | sed -e "s|/$name$||"`"
+	local DIRECTORY="`echo $1 | sed -e "s|/$group$||"`"
 	if [ ! -d "$DIRECTORY" ]; then
 		error "Directory '$DIRECTORY' does not exist."
 		exit 1
@@ -811,6 +811,14 @@ main() {
 			exit 1
 		fi
 		. $FILE
+
+		# group download directory code start
+		if [ $FILE = $PKGMK_PKGFILE ]; then
+			if [ -z "${group}" ]; then
+				group="${name}"
+			fi
+		fi
+		# group download directory code end
 	done
 	
 	check_directory "$PKGMK_SOURCE_DIR"
