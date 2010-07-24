@@ -159,7 +159,7 @@ download_file() {
 	DOWNLOAD_OPTS="--fail --globoff --insecure \
 --location ${CURL_RETRY}${CURL_RETRY_DELAY} \
 --connect-timeout 120 --keepalive-time 10 --speed-limit 1k \
---max-redirs 10 --output ${LOCAL_FILENAME_PARTIAL} "
+--max-redirs 10 --remote-header-name --output ${LOCAL_FILENAME_PARTIAL} "
 
 	if [ -f "${LOCAL_FILENAME_PARTIAL}" ]; then
 		info 'Partial download found, trying to resume'
